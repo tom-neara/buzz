@@ -109,6 +109,8 @@ buzz messages send --channel <UUID> \
 
 `channels unread [--channel <UUID>...] [--limit <n>]` is read-only: it counts messages newer than your synced NIP-RS read state and never marks anything read. It counts at most 200 channels (`--limit`) and reads at most 1000 events per channel. `capped: true` means `unread_count` is a lower bound. When channels were left out, stderr carries a `channels_truncated` warning with the dropped count; pass `--channel` to count specific ones. It loads read state as one atomic relay snapshot, so a relay that does not offer `read_state_snapshot` fails with exit 4 rather than risk a partial count. A read-state slot that cannot be decrypted or decoded also fails with exit 4 instead of counting as empty.
 
+`channels mark-read --channel <UUID>...` (repeatable, at most 200) moves each channel's read marker to its newest top-level message (thread replies are not counted, and a message dated in the future is capped at now). It publishes one frontier-only NIP-RS slot that the CLI owns, never lowers a marker, and never writes manual-unread (`ov_*`) entries. The slot id is saved in `<config dir>/buzz/read-state-cli.json` (mode 0600, one entry per pubkey and relay); delete that file only if you accept a new slot. Output is the write envelope `{event_id, accepted, published, message}` plus `channels: [{channel, cleared, advanced, marker, reason?}]`. `published: false` means every marker was already at or past its target, so nothing was sent. A channel whose manual mark-unread stays live after the write reports `cleared: false, reason: "override"`; `reason: "window"` means replies filled the newest 200 events, so the newest top-level message was not found. Any channel with `cleared: false` makes the command exit 4. An unreadable read-state slot, a snapshot with duplicate or conflicting coordinates, or a slot over its 32 KiB budget also exits 4 before anything is published. You mark read the state of your own identity, which is not your owner's.
+
 ## Workflow Inputs
 
 `workflows trigger --workflow <UUID> --inputs '<json>'` passes input variables as the trigger event's content. Omit `--inputs` for parameterless workflows.
@@ -134,6 +136,7 @@ buzz messages send --channel <UUID> \
 7. **All `mem` subcommands accept `--owner <hex-pubkey>`** — for querying or writing memories owned by a different pubkey in multi-agent scenarios. Defaults to the owner from `BUZZ_AUTH_TAG`.
 8. **`mem rm` cannot delete `core`** — use `mem set core ''` instead.
 9. **`channels unread` is not the desktop badge** — it counts teammates' messages (thread replies included) newer than the merged read marker, without desktop's local notification gate (followed threads, muted channels). Check `capped` and stderr before trusting a total.
+10. **`channels mark-read` clears your identity's markers, not your owner's** — an agent's read state is separate from its human's, so the owner's badge does not change.
 
 ## Forum Posts
 
